@@ -1,7 +1,7 @@
 Tabu
 ====
 
-In order to install the dependecies:
+In order to install the dependencies:
 
 ```
     $ pip install -r requirements.txt
