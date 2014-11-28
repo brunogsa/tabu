@@ -10,28 +10,33 @@ import pandas as pd
 # 1a versão: Buscar uma solução viável qualquer
 def construct_initial_solution(villains, heroes, villains_team, budget):
   attempt = 0
-  while attempt < 10:
+  while attempt < 50:
     attempt += 1
-    team = heroes.loc[random.sample(heroes.index, len(villains_team))]
-    if is_feasible_solution(villains_team, team, budget):
+    heroes_team = heroes.loc[random.sample(heroes.index, len(villains_team))]
+    if is_feasible_solution(villains_team, heroes_team, budget):
       break
-  return team
+  print str(attempt) + " attempts"
+  return heroes_team
   
   
-def is_feasible_solution(villains, heroes, budget):
+def is_feasible_solution(villains_team, heroes_team, budget):
   # O número de heróis escolhidos é menor ou igual ao de vilões
-  feasible = len(heroes) <= len(villains)
-  
-  # Para cada habilidade H, (Ex força, velocidade, etc...) 
-  # a média de H dos heróis escolhidos é maior que a média de H dos vilões
-  villains_skills = villains[["Intelligence", "Strength", "Speed", "Durability", "Energy Projection", "Fighting Skills"]].mean()
-  heroes_skills = heroes[["Intelligence", "Strength", "Speed", "Durability", "Energy Projection", "Fighting Skills"]].mean()
-  
-  feasible &= True in villains_skills.sub(heroes_skills).apply(lambda diff: diff < 0).values
+  feasible = len(heroes_team) <= len(villains_team)
+  if not feasible: return False
   
   # O custo" dos heróis escolhidos é menor ou igual ao "orçamento" disponível, 
-  # sendo o custo: a soma das habilidades e da popularidade dos heróis escolhidos.
-  feasible &= budget >= villains[["Intelligence", "Strength", "Speed", "Durability", "Energy Projection", "Fighting Skills", "Number of Comic Books Where Character Appeared"]].sum().values.sum()
+  # sendo o custo: o somatório de Popularidade[h]*PowegridMedio[h] para os h heróis do time.
+  heroes_team_pg = heroes_team[["Intelligence", "Strength", "Speed", "Durability", "Energy Projection", "Fighting Skills"]].mean(1).values
+  heroes_team_pop = heroes_team["Number of Comic Books Where Character Appeared"].values
+  heroes_cost = (heroes_team_pg*heroes_team_pop).sum()
+  feasible &= budget >= heroes_cost
+  if not feasible: return False
+
+  # A média das habilidades dos heróis escolhidos é maior que a média dos vilões
+  villains_team_pg = villains_team[["Intelligence", "Strength", "Speed", "Durability", "Energy Projection", "Fighting Skills"]].mean(1).values
+
+  feasible &= heroes_team_pg.mean() > villains_team_pg.mean()
+  
   return feasible
   
 def calculate_budget(villains, heroes, villains_team):
@@ -66,9 +71,12 @@ def main():
   heroes = df.loc[df['Hero or Villain'] == 'hero']
   villains_team = df.loc[df["Character ID"].isin(villains_ids)]
   budget = calculate_budget(villains, heroes, villains_team)
-  print budget
-  #heroes_team = construct_initial_solution(villains, heroes, villains_team, budget)
-  #print "Heroes team:"
-  #print heroes_team
+  heroes_team = construct_initial_solution(villains, heroes, villains_team, budget)
+  
+  print "Villains team:"
+  print villains_team
+
+  print "Heroes team:"
+  print heroes_team
 
 main()
