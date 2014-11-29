@@ -75,21 +75,38 @@ def calculate_budget(villains, heroes, villains_team):
   
   return max(exp1, exp2)
 
+def collaboration_level(collaboration, heroes_team):
+  heroes_ids = heroes_team["Character ID"].values
+  
+  c = collaboration.loc[(collaboration["Character 1 ID"].isin(heroes_ids)) & (collaboration["Character 2 ID"].isin(heroes_ids))]
+  if c.empty:
+    return 0
+  else:
+    return c["Number of Comic Books Where Character 1 and Character 2 Both Appeared"].sum()/2
+
+
+
 def main():
   villains_ids = np.fromfile(sys.argv[1], dtype=int, sep=" ")
 
   df = pd.read_csv(config.CHARACTERS_CSV, sep=';')
   villains = df.loc[df['Hero or Villain'] == 'villain']
   heroes = df.loc[df['Hero or Villain'] == 'hero']
+
   villains_team = df.loc[df["Character ID"].isin(villains_ids)]
-  
   budget = calculate_budget(villains, heroes, villains_team)
   heroes_team = construct_initial_solution(villains, heroes, villains_team, budget)
+
+  collaboration = pd.read_csv(config.SHARED_COMICS_CSV, sep=';')
   
   print "Villains team:"
   print villains_team
 
   print "Heroes team:"
   print heroes_team
+
+  cl = collaboration_level(collaboration, heroes_team)
+  print "collaboration_level:"
+  print cl
 
 main()
