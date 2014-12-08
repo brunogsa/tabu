@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 import sys
 import config
 import math
@@ -89,7 +90,7 @@ def is_viable_solution(villains_team, heroes_team, budget):
   heroes_cost = (heroes_team_pg*heroes_team_pop).sum()
 
   # Não é solução viável se o custo do time de heróis é maior que o orçamento
-  if heroes_cost > budget: return False
+  if os.environ.get('WITH_BUDGET') != None and heroes_cost > budget: return False
 
   # Para cada vilão, calcula a média de suas hablidades (powergrid médio)
   villains_team_pg = villains_team[POWERGRID].mean(1).values
@@ -218,7 +219,10 @@ def main():
 
   villains_team = villains.loc[villains[CHARACTER_ID].isin(villains_ids)]
 
-  budget = calculate_budget(villains, heroes, villains_team)
+  if os.environ.get('WITH_BUDGET') != None:
+    budget = calculate_budget(villains, heroes, villains_team)
+  else:
+    budget = 0
 
   # Parametros variaveis para o tabu search
   max_tabu = math.floor(len(villains_team))/2
@@ -233,7 +237,10 @@ def main():
   print heroes_team["Character Name"]
 
   cl = collaboration_level(collaboration, heroes_team, villains_team)
-  print "collaboration_level:"
+  if os.environ.get('WITH_BUDGET') != None:
+    print "collaboration_level (with budget):"
+  else:
+    print "collaboration_level (without budget):"
   print cl
 
 main()
