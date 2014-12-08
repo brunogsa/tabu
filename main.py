@@ -6,6 +6,7 @@ import random
 import numpy as np
 import pandas as pd
 
+MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 20
 POWERGRID = ["Intelligence", "Strength", "Speed", "Durability", "Energy Projection", "Fighting Skills"]
 POPULARITY = "Number of Comic Books Where Character Appeared"
 
@@ -75,15 +76,59 @@ def calculate_budget(villains, heroes, villains_team):
   
   return max(exp1, exp2)
 
-def collaboration_level(collaboration, heroes_team):
+def collaboration_level(collaboration, heroes_team, villains_team):
   heroes_ids = heroes_team["Character ID"].values
   
-  c = collaboration.loc[(collaboration["Character 1 ID"].isin(heroes_ids)) & (collaboration["Character 2 ID"].isin(heroes_ids))]
-  if c.empty:
-    return 0
-  else:
-    return c["Number of Comic Books Where Character 1 and Character 2 Both Appeared"].sum()/2
+  c_level = 0
+  c_heroes = collaboration.loc[(collaboration["Character 1 ID"].isin(heroes_ids)) & (collaboration["Character 2 ID"].isin(heroes_ids))]
+  if not c_heroes.empty:
+    c_level += c_heroes["Number of Comic Books Where Character 1 and Character 2 Both Appeared"].sum()/2
+  
+  c_villains = collaboration.loc[(collaboration["Character 1 ID"].isin(heroes_ids)) & (collaboration["Character 2 ID"].isin(villains_team))]
+  if not c_villains.empty:
+    c_level += c_villains["Number of Comic Books Where Character 1 and Character 2 Both Appeared"].sum()
+  
+  return c_level
 
+
+def tabu_search(villains, heroes, villains_team, collaboration, budget):
+  # Inserir na busca local uma lista de movimentos tabu que
+  # impedem, por algumas iterações, que um determinado
+  # movimento seja realizado.
+  # Objetivo: evitar que uma solução seja revisitada.
+  # Exemplo: no caso da equipartição de grafos, pode-se impedir
+  # que a troca de dois vértices por t iterações.
+  # Repetir a busca local básica por α iterações ou se nenhuma
+  # melhora foi obtida nas últimas β iterações.
+  # Os parâmetros α e β são fixados a priori.
+  # Parâmetros a ajustar: tamanho da lista tabu t, α e β.
+
+  gl_solution = -1 # Melhor solução global
+  gl_last_improvement = 0 # Iterações desde a última melhoria
+  while gl_last_improvement < MAX_ITERATIONS_WITHOUT_IMPROVEMENT:
+    # Contrói solução inicial
+    heroes_team = construct_initial_solution()
+    lc_solution = collaboration_level(collaboration, heroes_team, villains_team)
+    lc_last_improvement = 0
+    
+    while lc_last_improvement < MAX_ITERATIONS_WITHOUT_IMPROVEMENT:
+      neighboor_solutions = []
+      # TODO: Gera soluções vizinhas (levando o tabu em consideração)
+      # TODO: Encontra a melhor solução e faz dela a atual
+      # TODO: Coloca no tabu os movimentos realizados para chegar na solução atual
+      
+      curr_solution = -1
+      if curr_solution > lc_solution:
+        lc_solution = curr_solution
+        lc_last_improvement = 0
+      else:
+        lc_last_improvement += 1
+
+    if lc_solution > gl_solution:
+      gl_solution = lc_solution
+      gl_last_improvement = 0
+    else: 
+      gl_last_improvement += 1
 
 
 def main():
@@ -100,12 +145,12 @@ def main():
   collaboration = pd.read_csv(config.SHARED_COMICS_CSV, sep=';')
   
   print "Villains team:"
-  print villains_team
+  print villains_team["Character Name"]
 
   print "Heroes team:"
-  print heroes_team
+  print heroes_team["Character Name"]
 
-  cl = collaboration_level(collaboration, heroes_team)
+  cl = collaboration_level(collaboration, heroes_team, villains_team)
   print "collaboration_level:"
   print cl
 
