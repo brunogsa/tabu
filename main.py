@@ -19,8 +19,6 @@ def construct_solution(initial_heroes_team, exclusion_list, villains, heroes, co
   # tamanho maximo do time de herois
   team_max_size = len(villains_team)
 
-  # TODO make a list with only heroes collaboration
-
   # inicializa o time com os herois iniciais
   heroes_team = initial_heroes_team
 
