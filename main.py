@@ -61,7 +61,7 @@ def construct_initial_solution(villains_team, budget, villains, heroes, collabor
 # um time de heróis e um orçamento disponível
 def is_viable_solution(villains_team, heroes_team, budget):
   # Não é solução viável se o time de heróis é MAIOR que o de vilões
-  if len(heroes_team) > len(villains_team): return False
+  if len(heroes_team) != len(villains_team): return False
 
   # CALCULAR CUSTO DO TIME
   # CUSTO: SUM(Popularidade[h]*PowegridMedio[h]) para cada herói h
@@ -83,7 +83,7 @@ def is_viable_solution(villains_team, heroes_team, budget):
 
   # Não é solução viável se a média das habilidades dos vilões é MAIOR que a média dos heróis
   if villains_team_pg.mean() > heroes_team_pg.mean(): return False
-  
+
   return True
 
 # Calcula orçamento disponível, ver slide enviado pelo professor
