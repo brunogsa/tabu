@@ -20,7 +20,6 @@ class MarvelTabu:
     self.heroes = df.loc[df['Hero or Villain'] == 'hero']
     self.villains_team = self.villains.loc[self.villains[CHARACTER_ID].isin(villains_ids)]
     self.tabu_size = tabu_size
-    self.exclusion_list = []
     self.budget_calc = None
 
 
@@ -88,6 +87,7 @@ class MarvelTabu:
 
   # Responsavel por escolher solucoes viaveis
   def construct_solution(self, initial_heroes_team):
+    greed_tabu = []
     # inicializa o time com os herois iniciais
     heroes_team = initial_heroes_team
     # obter os herois para a solucao inicial
@@ -97,16 +97,20 @@ class MarvelTabu:
       max_colab = self.collaboration_coo.data.argmax()
       heroes_team = self.heroes.loc[self.heroes[CHARACTER_ID].isin([self.collaboration_coo.row[max_colab]]) | self.heroes[CHARACTER_ID].isin([self.collaboration_coo.col[max_colab]])]
       # coloca na lista de exclusao somente o ultimo heroi excolhido (o outro vai ser removido caso nao encontre uma solucao viavel)
-      self.exclusion_list.append(heroes_team[1:2][CHARACTER_ID].values[0])
-    # enquanto nao encontrar uma solucao viavel, continua procurando
+      greed_tabu.append(heroes_team[1:2][CHARACTER_ID].values[0])
+    
+	# enquanto nao encontrar uma solucao viavel, continua procurando
     while not self.is_viable_solution(heroes_team):
       # remove o primeiro heroi da lista caso nao for solucao viavel
-      self.exclusion_list.append(heroes_team[0:1][CHARACTER_ID].values[0])
+      first_hero = heroes_team[0:1][CHARACTER_ID].values[0]
+      if not first_hero in greed_tabu:
+        greed_tabu.append(first_hero)
+		
       heroes_team = heroes_team[1:]
       # enquanto nao tiver o tamanho maximo de time
       while len(heroes_team) < len(self.villains_team):
         # condicao de parada para solucao inviavel
-        if len(heroes_team) + len(self.exclusion_list) > len(self.heroes):
+        if len(heroes_team) + len(greed_tabu) > len(self.heroes):
           return None
         # escolhe randomicamente dentre os herois já no time
         # pega o herois que tem maior nivel de colaboração com esse heroi escolhido
@@ -115,7 +119,7 @@ class MarvelTabu:
         random_hero = heroes_team.loc[random.sample(heroes_team.index, 1)]
         # Usar sparse COOrdinate matrix
         collaborators = self.collaboration[:,random_hero[CHARACTER_ID].values[0]]
-        collaborators[self.exclusion_list,:] = 0
+        collaborators[greed_tabu,:] = 0
         collaborators[self.villains[CHARACTER_ID],:] = 0
 
         coordinate_collaboration = collaborators.tocoo()
@@ -124,7 +128,7 @@ class MarvelTabu:
         hero_max_collaboration_level = self.heroes.loc[self.heroes[CHARACTER_ID].isin([coordinate_collaboration.row[max_colab]])]
         heroes_team = heroes_team.append(hero_max_collaboration_level)
         # adiciona o heroi escolhido na lista de exclusao
-        self.exclusion_list.append(hero_max_collaboration_level[CHARACTER_ID].values[0])
+        greed_tabu.append(hero_max_collaboration_level[CHARACTER_ID].values[0])
     return heroes_team
 
   # Verifica se uma solução é viável dados um time de vilões,
