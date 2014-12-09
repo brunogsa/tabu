@@ -14,8 +14,12 @@ POPULARITY = "Number of Comic Books Where Character Appeared"
 COLLABORATION_LEVEL = "Number of Comic Books Where Character 1 and Character 2 Both Appeared"
 CHARACTER_ID = "Character ID"
 
+collaboration = cPickle.load(open('data/colaboracao.pickle', 'rb'))
+collaboration_coo = collaboration.tocoo()
+collaboration_csc = collaboration.tocsc()
+
 # Responsavel por escolher solucoes viaveis
-def construct_solution(initial_heroes_team, exclusion_list, villains, heroes, collaboration, villains_team, budget):
+def construct_solution(initial_heroes_team, exclusion_list, villains, heroes, villains_team, budget):
   # tamanho maximo do time de herois
   team_max_size = len(villains_team)
 
@@ -27,9 +31,8 @@ def construct_solution(initial_heroes_team, exclusion_list, villains, heroes, co
   if len(heroes_team) == 0:
     # obtem um par de herois que tem a colaboracao maxima
     # Usar sparse COOrdinate matrix
-    coordinate_collaboration = collaboration.tocoo()
-    max_colab = coordinate_collaboration.data.argmax()
-    heroes_team = heroes.loc[heroes[CHARACTER_ID].isin([coordinate_collaboration.row[max_colab]]) | heroes[CHARACTER_ID].isin([coordinate_collaboration.col[max_colab]])]
+    max_colab = collaboration_coo.data.argmax()
+    heroes_team = heroes.loc[heroes[CHARACTER_ID].isin([collaboration_coo.row[max_colab]]) | heroes[CHARACTER_ID].isin([collaboration_coo.col[max_colab]])]
     # coloca na lista de exclusao somente o ultimo heroi excolhido (o outro vai ser removido caso nao encontre uma solucao viavel)
     exclusion_list.append(heroes_team[1:2][CHARACTER_ID].values[0])
 
@@ -68,13 +71,13 @@ def construct_solution(initial_heroes_team, exclusion_list, villains, heroes, co
   return heroes_team
 
 # constroe a solucao inicial
-def construct_initial_solution(villains, heroes, collaboration, villains_team, budget):
+def construct_initial_solution(villains, heroes, villains_team, budget):
   # monta um time em branco como inicial
   # deixa a lista de exclusao em branco
   initial_heroes_team = pd.DataFrame(columns=heroes.columns.values)
   exclusion_list = []
 
-  return construct_solution(initial_heroes_team, exclusion_list, villains, heroes, collaboration, villains_team, budget)
+  return construct_solution(initial_heroes_team, exclusion_list, villains, heroes, villains_team, budget)
   
 # Verifica se uma solução é viável dados um time de vilões, 
 # um time de heróis e um orçamento disponível
@@ -131,15 +134,15 @@ def calculate_budget(villains, heroes, villains_team):
   return max(exp1, exp2)
 
 # Calcula o nivel de colaboracao obtido de acordo com os times
-def collaboration_level(collaboration, heroes_team, villains_team):
+def collaboration_level(heroes_team, villains_team):
   heroes_ids = heroes_team[CHARACTER_ID].values
   c_level = 0
-  for i in heroes_ids:
-    c_level += collaboration[i, heroes_ids].sum()
-  return c_level / 2
+  for i in range(len(heroes_ids)-1):
+    c_level += collaboration_csc[heroes_ids[i], heroes_ids[i+1:]].sum()
+  return c_level
 
 # Algoritmo de tabu search
-def tabu_search(villains, heroes, collaboration, villains_team, budget, max_tabu, max_candidates):
+def tabu_search(villains, heroes, villains_team, budget, max_tabu, max_candidates):
   # Inserir na busca local uma lista de movimentos tabu que
   # impedem, por algumas iterações, que um determinado
   # movimento seja realizado.
@@ -153,8 +156,8 @@ def tabu_search(villains, heroes, collaboration, villains_team, budget, max_tabu
 
   # Constrói solução inicial
   gl_solution = {}
-  gl_solution["team"] = construct_initial_solution(villains, heroes, collaboration, villains_team, budget)
-  gl_solution["collaboration_level"] = collaboration_level(collaboration, gl_solution["team"], villains_team)
+  gl_solution["team"] = construct_initial_solution(villains, heroes, villains_team, budget)
+  gl_solution["collaboration_level"] = collaboration_level(gl_solution["team"], villains_team)
 
   gl_last_improvement = 0 # Iterações desde a última melhoria
   tabu_list = [] #lista tabu
@@ -171,8 +174,8 @@ def tabu_search(villains, heroes, collaboration, villains_team, budget, max_tabu
     exclusion_list += tabu_list
     while len(neighboor_solutions) < max_candidates:
       neighboor_solution = {}
-      neighboor_solution["team"] = construct_solution(initial_heroes_team, exclusion_list, villains, heroes, collaboration, villains_team, budget)
-      neighboor_solution["collaboration_level"] = collaboration_level(collaboration, neighboor_solution["team"], villains_team)
+      neighboor_solution["team"] = construct_solution(initial_heroes_team, exclusion_list, villains, heroes, villains_team, budget)
+      neighboor_solution["collaboration_level"] = collaboration_level(neighboor_solution["team"], villains_team)
       neighboor_solutions.append(neighboor_solution)
       # exclui todos os que ja foram escolhidos como solucao vizinha
       exclusion_list += list(set(neighboor_solution["team"][CHARACTER_ID].values) - set(exclusion_list))
@@ -206,8 +209,6 @@ def main():
   villains = df.loc[df['Hero or Villain'] == 'villain']
   heroes = df.loc[df['Hero or Villain'] == 'hero']
 
-  collaboration = cPickle.load(open('data/colaboracao.pickle', 'rb'))
-
   villains_team = villains.loc[villains[CHARACTER_ID].isin(villains_ids)]
 
   if os.environ.get('WITH_BUDGET') != None:
@@ -219,7 +220,7 @@ def main():
   max_tabu = math.floor(len(villains_team))/2
   max_candidates = len(villains_team)
 
-  heroes_team = tabu_search(villains, heroes, collaboration, villains_team, budget, max_tabu, max_candidates)
+  heroes_team = tabu_search(villains, heroes, villains_team, budget, max_tabu, max_candidates)
 
   if os.environ.get('DEBUG') != None:
     print "Villains team:"
@@ -228,7 +229,7 @@ def main():
     print "Heroes team:"
     print heroes_team["Character Name"]
 
-  cl = collaboration_level(collaboration, heroes_team, villains_team)
+  cl = collaboration_level(heroes_team, villains_team)
   if os.environ.get('DEBUG') != None:
     if os.environ.get('WITH_BUDGET') != None:
       print "collaboration_level (with budget):"
