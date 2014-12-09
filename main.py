@@ -230,17 +230,19 @@ def main():
 
   heroes_team = tabu_search(villains, heroes, collaboration, villains_team, budget, max_tabu, max_candidates)
 
-  print "Villains team:"
-  print villains_team["Character Name"]
+  if os.environ.get('DEBUG') != None:
+    print "Villains team:"
+    print villains_team["Character Name"]
 
-  print "Heroes team:"
-  print heroes_team["Character Name"]
+    print "Heroes team:"
+    print heroes_team["Character Name"]
 
   cl = collaboration_level(collaboration, heroes_team, villains_team)
-  if os.environ.get('WITH_BUDGET') != None:
-    print "collaboration_level (with budget):"
-  else:
-    print "collaboration_level (without budget):"
+  if os.environ.get('DEBUG') != None:
+    if os.environ.get('WITH_BUDGET') != None:
+      print "collaboration_level (with budget):"
+    else:
+      print "collaboration_level (without budget):"
   print cl
 
 main()
