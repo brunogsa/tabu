@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+INSTANCES=$(ls data/villain_teams/*.txt | sort -n -t V -k 2)
+echo -e "INSTANCE_NAME\tMAX_COLLABORATION\tTIME" > our_results.txt
+COUNT=0
+for f in $INSTANCES
+do
+  NAMES[$COUNT]=${f##*/}
+  START[$COUNT]=$(date +%s%N)
+  echo "Running ${NAMES[$COUNT]%.*}"
+  COLLABORATION[$COUNT]=$(python main.py $f)
+  END[$COUNT]=$(date +%s%N)
+  DIFF[$COUNT]=$(echo "${END[$COUNT]} - ${START[$COUNT]}" | bc)
+  echo -e "${NAMES[$COUNT]%.*}\t${COLLABORATION[$COUNT]}\t${DIFF[$COUNT]}" >> our_results.txt
+  COUNT=$[$COUNT+1]
+done
+echo -e "----------------------------------------" >> our_results.txt
+echo -e "\twith_budget\t" >> our_results.txt
+echo -e "----------------------------------------" >> our_results.txt
+echo -e "INSTANCE_NAME\tMAX_COLLABORATION\tTIME" >> our_results.txt
+for f in $INSTANCES
+do
+  NAMES[$COUNT]=${f##*/}
+  START[$COUNT]=$(date +%s%N)
+  echo "Running ${NAMES[$COUNT]%.*} with budget"
+  COLLABORATION[$COUNT]=$(WITH_BUDGET=1 python main.py $f)
+  END[$COUNT]=$(date +%s%N)
+  DIFF[$COUNT]=$(echo "${END[$COUNT]} - ${START[$COUNT]}" | bc)
+  echo -e "${NAMES[$COUNT]%.*}\t${COLLABORATION[$COUNT]}\t${DIFF[$COUNT]}" >> our_results.txt
+  COUNT=$[$COUNT+1]
+done
+echo "$(column -t our_results.txt)" > our_results.txt
