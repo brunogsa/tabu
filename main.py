@@ -6,14 +6,13 @@ import math
 import random
 import numpy as np
 import pandas as pd
+import cPickle
 
 MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 100
 POWERGRID = ["Intelligence", "Strength", "Speed", "Durability", "Energy Projection", "Fighting Skills"]
 POPULARITY = "Number of Comic Books Where Character Appeared"
 COLLABORATION_LEVEL = "Number of Comic Books Where Character 1 and Character 2 Both Appeared"
 CHARACTER_ID = "Character ID"
-CHARACTER_1_ID = "Character 1 ID"
-CHARACTER_2_ID = "Character 2 ID"
 
 # Responsavel por escolher solucoes viaveis
 def construct_solution(initial_heroes_team, exclusion_list, villains, heroes, collaboration, villains_team, budget):
@@ -27,9 +26,10 @@ def construct_solution(initial_heroes_team, exclusion_list, villains, heroes, co
 
   if len(heroes_team) == 0:
     # obtem um par de herois que tem a colaboracao maxima
-    tmp = collaboration.loc[-collaboration[CHARACTER_1_ID].isin(villains[CHARACTER_ID]) & -collaboration[CHARACTER_2_ID].isin(villains[CHARACTER_ID])]
-    max_collaboration = tmp.loc[tmp[COLLABORATION_LEVEL].argmax()]
-    heroes_team = heroes.loc[heroes[CHARACTER_ID].isin([max_collaboration[CHARACTER_1_ID]]) | heroes[CHARACTER_ID].isin([max_collaboration[CHARACTER_2_ID]])]
+    # Usar sparse COOrdinate matrix
+    coordinate_collaboration = collaboration.tocoo()
+    max_colab = coordinate_collaboration.data.argmax()
+    heroes_team = heroes.loc[heroes[CHARACTER_ID].isin([coordinate_collaboration.row[max_colab]]) | heroes[CHARACTER_ID].isin([coordinate_collaboration.col[max_colab]])]
     # coloca na lista de exclusao somente o ultimo heroi excolhido (o outro vai ser removido caso nao encontre uma solucao viavel)
     exclusion_list.append(heroes_team[1:2][CHARACTER_ID].values[0])
 
@@ -50,11 +50,16 @@ def construct_solution(initial_heroes_team, exclusion_list, villains, heroes, co
       # (já está sendo considerado remover os viloes e a lista de esclusão
       # adiciona no time de heroi
       random_hero = heroes_team.loc[random.sample(heroes_team.index, 1)]
-      tmp = collaboration.loc[collaboration[CHARACTER_1_ID].isin([random_hero[CHARACTER_ID].values[0]])]
-      tmp = tmp.loc[-tmp[CHARACTER_2_ID].isin(exclusion_list)]
-      tmp = tmp.loc[-tmp[CHARACTER_2_ID].isin(villains[CHARACTER_ID])]
-      max_collaboration = tmp.loc[tmp[COLLABORATION_LEVEL].argmax()]
-      hero_max_collaboration_level = heroes.loc[heroes[CHARACTER_ID].isin([max_collaboration[CHARACTER_2_ID]])]
+      # Usar sparse COOrdinate matrix
+
+      collaborators = collaboration[:,random_hero[CHARACTER_ID].values[0]]
+      collaborators[exclusion_list,:] = 0
+      collaborators[villains[CHARACTER_ID],:] = 0
+
+      coordinate_collaboration = collaborators.tocoo()
+      max_colab = coordinate_collaboration.data.argmax()
+
+      hero_max_collaboration_level = heroes.loc[heroes[CHARACTER_ID].isin([coordinate_collaboration.row[max_colab]])]
       heroes_team = heroes_team.append(hero_max_collaboration_level)
 
       # adiciona o heroi escolhido na lista de exclusao
@@ -126,26 +131,12 @@ def calculate_budget(villains, heroes, villains_team):
   return max(exp1, exp2)
 
 # Calcula o nivel de colaboracao obtido de acordo com os times
-# TODO ainda é a funcao mais lenta. Tantar melhorar a performance
 def collaboration_level(collaboration, heroes_team, villains_team):
   heroes_ids = heroes_team[CHARACTER_ID].values
-
-  character_1_id_heroes_team_collaboration = collaboration.loc[collaboration[CHARACTER_1_ID].isin(heroes_ids)]
-
   c_level = 0
-
-  # nivel de colaboracao entre os herois
-  c_heroes = character_1_id_heroes_team_collaboration.loc[character_1_id_heroes_team_collaboration[CHARACTER_2_ID].isin(heroes_ids)]
-  if not c_heroes.empty:
-    c_level += c_heroes[COLLABORATION_LEVEL].sum()/2
-
-  # nivel de colaboracao entre herois e viloes (fighting experience)
-  # TODO a resposta final precisava somar o fighting experience?
-  c_villains = character_1_id_heroes_team_collaboration.loc[character_1_id_heroes_team_collaboration[CHARACTER_2_ID].isin(villains_team)]
-  if not c_villains.empty:
-    c_level += c_villains[COLLABORATION_LEVEL].sum()
-
-  return c_level
+  for i in heroes_ids:
+    c_level += collaboration[i, heroes_ids].sum()
+  return c_level / 2
 
 # Algoritmo de tabu search
 def tabu_search(villains, heroes, collaboration, villains_team, budget, max_tabu, max_candidates):
@@ -215,7 +206,7 @@ def main():
   villains = df.loc[df['Hero or Villain'] == 'villain']
   heroes = df.loc[df['Hero or Villain'] == 'hero']
 
-  collaboration = pd.read_csv(config.SHARED_COMICS_CSV, sep=';')
+  collaboration = cPickle.load(open('data/colaboracao.pickle', 'rb'))
 
   villains_team = villains.loc[villains[CHARACTER_ID].isin(villains_ids)]
 
