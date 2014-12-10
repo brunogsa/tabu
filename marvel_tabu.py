@@ -158,13 +158,19 @@ class MarvelTabu:
     for i in range(len(heroes_ids)-1):
       c_level += self.collaboration_csc[heroes_ids[i], heroes_ids[i+1:]].sum()
     return c_level
-
+  
   def score(self, heroes_team):
     heroes_ids = heroes_team[CHARACTER_ID].values
     score = self.collaboration_level(heroes_team)
-    for i in heroes_ids:
-      score += self.collaboration_all_csc[i, self.villains_ids].sum()
+    score += self.fighting_experience(heroes_ids)
     return score;
+
+  def fighting_experience(self, heroes_ids):
+    fighting_experience = 0;
+    for i in heroes_ids:
+      fighting_experience += self.collaboration_all_csc[i, self.villains_ids].sum()
+    return fighting_experience;
+
 
   def budget(self):
     if self.budget_calc == None:

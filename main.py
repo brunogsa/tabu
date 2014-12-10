@@ -19,11 +19,21 @@ def main():
     print team["team"]["Character Name"]
 
   cl = team["collaboration_level"]
+
+  collaboration_heroes = marvel_tabu.collaboration_level(team["team"])
+  fighting_experience = marvel_tabu.fighting_experience(team["team"]["Character ID"].values)
+
+
   if os.environ.get('DEBUG') != None:
     if os.environ.get('WITH_BUDGET') != None:
       print "collaboration_level (with budget):"
     else:
       print "collaboration_level (without budget):"
-  print cl
+
+  if os.environ.get('WITH_BUDGET') != None:
+    print str(cl) + "\t" + str(collaboration_heroes) + "\t" + str(fighting_experience) + "\t" + ','.join(team["team"]["Character ID"].values) + "\t" + str(marvel_tabu.budget())
+  else:
+    print str(cl) + "\t" + str(collaboration_heroes) + "\t" + str(fighting_experience)
+    
 
 main()
