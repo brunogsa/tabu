@@ -8,7 +8,7 @@ import sys
 
 def main():
   villains_ids = np.fromfile(sys.argv[1], dtype=int, sep=" ")
-  marvel_tabu = MarvelTabu(villains_ids, math.floor(len(villains_ids))/2, os.environ.get('WITH_BUDGET') != None)
+  marvel_tabu = MarvelTabu(villains_ids, 76, os.environ.get('WITH_BUDGET') != None)
   team = marvel_tabu.tabu_search()
 
   if os.environ.get('DEBUG') != None:

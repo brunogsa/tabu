@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import config
 import cPickle
+import numpy as np
 import pandas as pd
 import random
 
@@ -92,20 +93,25 @@ class MarvelTabu:
     heroes_team = initial_heroes_team
     # obter os herois para a solucao inicial
     if len(heroes_team) == 0:
-      # obtem um par de herois que tem a colaboracao maxima
+      # Seja N a quantidade de viloes
+      # Aqui a gente cria uma equipe de herois N
+      # pegando pares que maximizam a colaboracao
       # Usar sparse COOrdinate matrix
-      max_colab = self.collaboration_coo.data.argmax()
-      heroes_team = self.heroes.loc[self.heroes[CHARACTER_ID].isin([self.collaboration_coo.row[max_colab]]) | self.heroes[CHARACTER_ID].isin([self.collaboration_coo.col[max_colab]])]
-      # coloca na lista de exclusao somente o ultimo heroi excolhido (o outro vai ser removido caso nao encontre uma solucao viavel)
-      greed_tabu.append(heroes_team[1:2][CHARACTER_ID].values[0])
-    
-	# enquanto nao encontrar uma solucao viavel, continua procurando
+      ind = np.argpartition(self.collaboration_coo.data, -len(self.villains_team))[-len(self.villains_team):]
+      inc = 1
+      while len(np.unique(self.collaboration_coo.row[ind])) < len(self.villains_team):
+        ind = np.argpartition(self.collaboration_coo.data, -(len(self.villains_team) + inc))[-(len(self.villains_team) + inc):]
+        inc += 1
+      heroes_team = self.heroes.loc[self.heroes[CHARACTER_ID].isin(self.collaboration_coo.row[ind])]
+      greed_tabu.append(heroes_team[:][CHARACTER_ID].values[0])
+
+    # enquanto nao encontrar uma solucao viavel, continua procurando
     while not self.is_viable_solution(heroes_team):
       # remove o primeiro heroi da lista caso nao for solucao viavel
       first_hero = heroes_team[0:1][CHARACTER_ID].values[0]
       if not first_hero in greed_tabu:
         greed_tabu.append(first_hero)
-		
+
       heroes_team = heroes_team[1:]
       # enquanto nao tiver o tamanho maximo de time
       while len(heroes_team) < len(self.villains_team):
@@ -120,7 +126,6 @@ class MarvelTabu:
         # Usar sparse COOrdinate matrix
         collaborators = self.collaboration[:,random_hero[CHARACTER_ID].values[0]]
         collaborators[greed_tabu,:] = 0
-        collaborators[self.villains[CHARACTER_ID],:] = 0
 
         coordinate_collaboration = collaborators.tocoo()
         max_colab = coordinate_collaboration.data.argmax()
