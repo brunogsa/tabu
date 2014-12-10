@@ -14,9 +14,11 @@ class MarvelTabu:
   def __init__(self, villains_ids, tabu_size, with_budget):
     self.with_budget = with_budget
     self.collaboration = cPickle.load(open('data/colaboracao.pickle', 'rb'))
+    self.collaboration_all_csc = cPickle.load(open('data/colaboracao_all.pickle', 'rb')).tocsc()
     self.collaboration_coo = self.collaboration.tocoo()
     self.collaboration_csc = self.collaboration.tocsc()
     df = pd.read_csv(config.CHARACTERS_CSV, sep=';')
+    self.villains_ids = villains_ids
     self.villains = df.loc[df['Hero or Villain'] == 'villain']
     self.heroes = df.loc[df['Hero or Villain'] == 'hero']
     self.villains_team = self.villains.loc[self.villains[CHARACTER_ID].isin(villains_ids)]
@@ -76,6 +78,7 @@ class MarvelTabu:
       else:
         gl_last_improvement += 1
 
+    gl_solution["collaboration_level"] = self.score(gl_solution["team"])
     return gl_solution
 
 
@@ -169,6 +172,13 @@ class MarvelTabu:
     for i in range(len(heroes_ids)-1):
       c_level += self.collaboration_csc[heroes_ids[i], heroes_ids[i+1:]].sum()
     return c_level
+
+  def score(self, heroes_team):
+    heroes_ids = heroes_team[CHARACTER_ID].values
+    score = self.collaboration_level(heroes_team)
+    for i in range(len(self.villains_ids)-1):
+      score += self.collaboration_all_csc[heroes_ids[i], self.villains_ids[i+1:]].sum()
+    return score;
 
   def budget(self):
     if self.budget_calc == None:
