@@ -2,16 +2,17 @@
 import config
 import cPickle
 import numpy as np
+from operator import itemgetter
 import pandas as pd
 import random
 
-MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 100
+MAX_ITERATIONS_WITHOUT_IMPROVEMENT = 10
 CHARACTER_ID = "Character ID"
 POWERGRID = ["Intelligence", "Strength", "Speed", "Durability", "Energy Projection", "Fighting Skills"]
 POPULARITY = "Number of Comic Books Where Character Appeared"
 
 class MarvelTabu:
-  def __init__(self, villains_ids, tabu_size, with_budget):
+  def __init__(self, villains_ids, with_budget):
     self.with_budget = with_budget
     self.collaboration = cPickle.load(open('data/colaboracao.pickle', 'rb'))
     self.collaboration_all_csc = cPickle.load(open('data/colaboracao_all.pickle', 'rb')).tocsc()
@@ -22,7 +23,7 @@ class MarvelTabu:
     self.villains = df.loc[df['Hero or Villain'] == 'villain']
     self.heroes = df.loc[df['Hero or Villain'] == 'hero']
     self.villains_team = self.villains.loc[self.villains[CHARACTER_ID].isin(villains_ids)]
-    self.tabu_size = tabu_size
+    self.tabu_size = len(self.heroes) - (len(self.heroes) / len(self.villains_team))
     self.budget_calc = None
 
 
@@ -39,104 +40,87 @@ class MarvelTabu:
     # Os parâmetros α e β são fixados a priori.
     # Parâmetros a ajustar: tamanho da lista tabu t, α e β.
 
+    self.tabu_list = [] #lista tabu
+
     # Constrói solução inicial
     gl_solution = {}
-    gl_solution["team"] = self.construct_initial_solution()
-    gl_solution["collaboration_level"] = self.collaboration_level(gl_solution["team"])
+    initial_team = self.construct_initial_solution()
+    if not self.is_viable_solution(initial_team):
+      initial_team = self.construct_solution(initial_team)
+    gl_solution["team"] = initial_team
+    gl_solution["collaboration_level"] = self.collaboration_level(initial_team)
 
     gl_last_improvement = 0 # Iterações desde a última melhoria
-    tabu_list = [] #lista tabu
+    neighboors_amount = (len(self.heroes) / len(self.villains_team) / 4)
 
     while gl_last_improvement < MAX_ITERATIONS_WITHOUT_IMPROVEMENT:
       neighboor_solutions = []
-      # Usa como time inicial de herois para montar as solucoes vizinhas
-      # Remove todos que já estão na lista tabu
-      initial_heroes_team = gl_solution["team"].loc[-gl_solution["team"][CHARACTER_ID].isin(tabu_list)]
       # Controi uma lista de vizinhos até o limite maximo de candidatos possiveis
-      self.exclusion_list = []
-      self.exclusion_list += tabu_list
-      while len(neighboor_solutions) < len(self.villains_team):
+      while len(neighboor_solutions) < neighboors_amount:
         neighboor_solution = {}
-        neighboor_solution["team"] = self.construct_solution(initial_heroes_team)
+        neighboor_solution["team"] = self.construct_solution(gl_solution["team"])
         neighboor_solution["collaboration_level"] = self.collaboration_level(neighboor_solution["team"])
         neighboor_solutions.append(neighboor_solution)
-        # exclui todos os que ja foram escolhidos como solucao vizinha
-        self.exclusion_list += list(set(neighboor_solution["team"][CHARACTER_ID].values) - set(self.exclusion_list))
       # Ordena em order descrescente as solucoes candidatas a melhores
       # Pega a melhor solucao encontrada
-      neighboor_solutions.sort(key=lambda c: c["collaboration_level"], reverse=True)
-      best_candiate = neighboor_solutions[0]
+      best_candiate = sorted(neighboor_solutions, key=itemgetter('collaboration_level'), reverse=True)[0]
+      #best_candiate = neighboor_solutions.sort(key=lambda c: c["collaboration_level"], reverse=True)[0]
       # substitui a solucao global pela solucao encontrada atoe o momento
       if best_candiate["collaboration_level"] > gl_solution["collaboration_level"]:
         gl_solution = best_candiate
         gl_last_improvement = 0
-        # Atualiza a lista tabu
-        for hero in best_candiate["team"]:
-          if len(tabu_list) >= self.tabu_size:
-            tabu_list.pop(0)
-          tabu_list.append(hero)
       else:
         gl_last_improvement += 1
-
     gl_solution["collaboration_level"] = self.score(gl_solution["team"])
     return gl_solution
 
+  # Adiciona um heroi a lista tabu
+  # Se a lista estiver cheia remove o ultimo adicionado
+  # Fila FIFO
+  def add_hero_to_tabu(self, hero):
+    if len(self.tabu_list) >= self.tabu_size:
+      self.tabu_list.pop(0)
+    self.tabu_list.append(hero)
 
   # constroe a solucao inicial
+  # Seja N a quantidade de viloes
+  # Aqui a gente cria uma equipe de N herois
+  # pegando pares que maximizam a colaboracao
+  # Usar sparse COOrdinate matrix
   def construct_initial_solution(self):
-    # monta um time em branco como inicial
-    # deixa a lista de exclusao em branco
-    initial_heroes_team = pd.DataFrame(columns=self.heroes.columns.values)
-    return self.construct_solution(initial_heroes_team)
+    ind = np.argpartition(self.collaboration_coo.data, -len(self.villains_team))[-len(self.villains_team):]
+    inc = 1
+    while len(np.unique(self.collaboration_coo.row[ind])) < len(self.villains_team):
+      ind = np.argpartition(self.collaboration_coo.data, -(len(self.villains_team) + inc))[-(len(self.villains_team) + inc):]
+      inc += 1
+    heroes_team = self.heroes.loc[self.heroes[CHARACTER_ID].isin(self.collaboration_coo.row[ind])]
+    return heroes_team
 
   # Responsavel por escolher solucoes viaveis
   def construct_solution(self, initial_heroes_team):
-    greed_tabu = []
     # inicializa o time com os herois iniciais
     heroes_team = initial_heroes_team
-    # obter os herois para a solucao inicial
-    if len(heroes_team) == 0:
-      # Seja N a quantidade de viloes
-      # Aqui a gente cria uma equipe de herois N
-      # pegando pares que maximizam a colaboracao
-      # Usar sparse COOrdinate matrix
-      ind = np.argpartition(self.collaboration_coo.data, -len(self.villains_team))[-len(self.villains_team):]
-      inc = 1
-      while len(np.unique(self.collaboration_coo.row[ind])) < len(self.villains_team):
-        ind = np.argpartition(self.collaboration_coo.data, -(len(self.villains_team) + inc))[-(len(self.villains_team) + inc):]
-        inc += 1
-      heroes_team = self.heroes.loc[self.heroes[CHARACTER_ID].isin(self.collaboration_coo.row[ind])]
-      greed_tabu.append(heroes_team[:][CHARACTER_ID].values[0])
-
+    tries = 0
     # enquanto nao encontrar uma solucao viavel, continua procurando
     while not self.is_viable_solution(heroes_team):
-      # remove o primeiro heroi da lista caso nao for solucao viavel
-      first_hero = heroes_team[0:1][CHARACTER_ID].values[0]
-      if not first_hero in greed_tabu:
-        greed_tabu.append(first_hero)
+      tries += 1
+      # remover heroi aleatorio
+      random_hero = heroes_team.loc[random.sample(heroes_team.index, 1)]
+      heroes_team = heroes_team[heroes_team[CHARACTER_ID] != random_hero[CHARACTER_ID].values[0]]
+      self.add_hero_to_tabu(random_hero[CHARACTER_ID].values[0])
 
-      heroes_team = heroes_team[1:]
-      # enquanto nao tiver o tamanho maximo de time
-      while len(heroes_team) < len(self.villains_team):
-        # condicao de parada para solucao inviavel
-        if len(heroes_team) + len(greed_tabu) > len(self.heroes):
-          return None
-        # escolhe randomicamente dentre os herois já no time
-        # pega o herois que tem maior nivel de colaboração com esse heroi escolhido
-        # (já está sendo considerado remover os viloes e a lista de esclusão
-        # adiciona no time de heroi
+      collaborators = self.collaboration[heroes_team[CHARACTER_ID].values,:]
+      collaborators[:,self.tabu_list] = 0
+      collaborators[:,heroes_team[CHARACTER_ID].values] = 0
+      coo_colabs = collaborators.tocoo()
+      if len(coo_colabs.data) != 0:
+        heroes_team = heroes_team.append(self.heroes.loc[self.heroes[CHARACTER_ID].isin([coo_colabs.col[coo_colabs.data.argmax()]])])
+
+      if not self.is_viable_solution(heroes_team) and tries > (len(self.heroes) / len(self.villains_team)):
         random_hero = heroes_team.loc[random.sample(heroes_team.index, 1)]
-        # Usar sparse COOrdinate matrix
-        collaborators = self.collaboration[:,random_hero[CHARACTER_ID].values[0]]
-        collaborators[greed_tabu,:] = 0
-
-        coordinate_collaboration = collaborators.tocoo()
-        max_colab = coordinate_collaboration.data.argmax()
-
-        hero_max_collaboration_level = self.heroes.loc[self.heroes[CHARACTER_ID].isin([coordinate_collaboration.row[max_colab]])]
-        heroes_team = heroes_team.append(hero_max_collaboration_level)
-        # adiciona o heroi escolhido na lista de exclusao
-        greed_tabu.append(hero_max_collaboration_level[CHARACTER_ID].values[0])
+        heroes_team = heroes_team[heroes_team[CHARACTER_ID] != random_hero[CHARACTER_ID].values[0]]
+        self.add_hero_to_tabu(random_hero[CHARACTER_ID].values[0])
+        tries = 0
     return heroes_team
 
   # Verifica se uma solução é viável dados um time de vilões,
@@ -151,11 +135,13 @@ class MarvelTabu:
     # Para cada herói, calcula a média de suas hablidades (powergrid médio)
     heroes_team_pg = heroes_team[POWERGRID].mean(1).values
     # Para cada herói, seleciona sua popularidade
-    heroes_team_pop = heroes_team[POPULARITY].values
-    # Multiplica powergrid médio e popularidade e soma os resultados para obter custo
-    heroes_cost = (heroes_team_pg*heroes_team_pop).sum()
-    # Não é solução viável se o custo do time de heróis é maior que o orçamento
-    if self.with_budget and heroes_cost > self.budget(): return False
+    if self.with_budget:
+      heroes_team_pop = heroes_team[POPULARITY].values
+      # Multiplica powergrid médio e popularidade e soma os resultados para obter custo
+      heroes_cost = (heroes_team_pg*heroes_team_pop).sum()
+      # Não é solução viável se o custo do time de heróis é maior que o orçamento
+      if heroes_cost > self.budget():
+        return False
     # Para cada vilão, calcula a média de suas hablidades (powergrid médio)
     villains_team_pg = self.villains_team[POWERGRID].mean(1).values
     # Não é solução viável se a média das habilidades dos vilões é MAIOR que a média dos heróis
@@ -176,8 +162,8 @@ class MarvelTabu:
   def score(self, heroes_team):
     heroes_ids = heroes_team[CHARACTER_ID].values
     score = self.collaboration_level(heroes_team)
-    for i in range(len(self.villains_ids)-1):
-      score += self.collaboration_all_csc[heroes_ids[i], self.villains_ids[i+1:]].sum()
+    for i in heroes_ids:
+      score += self.collaboration_all_csc[i, self.villains_ids].sum()
     return score;
 
   def budget(self):
